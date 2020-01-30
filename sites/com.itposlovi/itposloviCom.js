@@ -1,6 +1,6 @@
 const puppeteer = require('puppeteer');
 const saver = require('../../utils/saver');
-const database = require('../../utils/dbConfig');
+const insertIntoDatabase = require('../../utils/dbConfig');
 const fromString = require('uuidv4').fromString;
 const jobs = [];
 
@@ -29,24 +29,26 @@ const jobs = [];
             await page.goto(jobsURL[i]);
 
             const details = await page.evaluate(() => {
-                const data = {
+                const unstructuredData = {};
+                unstructuredData.HTML = document.querySelector('html').innerHTML;
+                const stucturedData = {
                     title: document.querySelector('div.leftContent h2') ?
-                    document.querySelector('div.leftContent h2').innerText : '',
+                        document.querySelector('div.leftContent h2').innerText : '',
                     position: '',
                     hiringOrganization: {
-                        name: document.querySelector('ul:nth-child(1) li:nth-child(1) a') ? 
-                        document.querySelector('ul:nth-child(1) li:nth-child(1) a').innerText : '',
+                        name: document.querySelector('ul:nth-child(1) li:nth-child(1) a') ?
+                            document.querySelector('ul:nth-child(1) li:nth-child(1) a').innerText : '',
                         sameAs: document.querySelector('ul:nth-child(1) li:nth-child(1) a').href || ''
                     },
                     validThrough: '',
-                    datePosted: document.querySelector('div.oglasTop small') ? 
-                    document.querySelector('div.oglasTop small').innerText : '',
+                    datePosted: document.querySelector('div.oglasTop small') ?
+                        document.querySelector('div.oglasTop small').innerText : '',
                     employmentType: document.querySelector('div.oglasTop ul:nth-child(2) li:nth-child(2)') ?
-                    document.querySelector('div.oglasTop ul:nth-child(2) li:nth-child(2)').innerText.split(':')[1].trim() : '',
+                        document.querySelector('div.oglasTop ul:nth-child(2) li:nth-child(2)').innerText.split(':')[1].trim() : '',
                     jobLocation: {
                         address: {
                             addressLocality: document.querySelector('div.oglasTop ul:nth-child(1) li:nth-child(2)') ?
-                            document.querySelector('div.oglasTop ul:nth-child(1) li:nth-child(2)').innerText.split(':')[1].trim() : '',
+                                document.querySelector('div.oglasTop ul:nth-child(1) li:nth-child(2)').innerText.split(':')[1].trim() : '',
                             addressCountry: '',
                             addressRegion: ''
                         }
@@ -56,7 +58,7 @@ const jobs = [];
                     baseSalary: '',
                     equityOffered: '',
                     description: document.querySelector('div.leftContent p:nth-child(5)') ?
-                    document.querySelector('div.leftContent p:nth-child(5)').innerText : '',
+                        document.querySelector('div.leftContent p:nth-child(5)').innerText : '',
                     language: '',
                     skillRequirements: '',
                     educationRequirements: '',
@@ -73,16 +75,26 @@ const jobs = [];
                     relocationOffered: '',
                     jobBenefits: ''
                 }
-                return data;
+                return [stucturedData, unstructuredData];
             });
-            details.id = fromString(JSON.stringify(details));
-            jobs.push(details);
-            await saver.saveToJSON(jobs, './sites/com.itposlovi/data/itposloviCom.json');
-            
-            // await database('itposloviCom', details);
-        }
-        await browser.close();
+            try {
+                details[0]._id = fromString(JSON.stringify(details[0]));
+                await insertIntoDatabase('itposlovi.com_stuctured', details[0]);
 
+                details[1]._id = fromString(JSON.stringify(details[1]));
+                await insertIntoDatabase('itposlovi.com_unstructured', details[1]);
+            } catch (e) {
+                if (e.message.includes('E11000 duplicate key error collection:')) {
+                    continue;
+                } else {
+                    throw e;
+                }
+            }
+            // jobs.push(details[0]);
+            // await saver.saveToJSON(jobs, './sites/com.itposlovi/data/itposloviCom.json');
+        }
+        await page.close();
+        await browser.close();
     } catch (error) {
         console.log(error);
     }

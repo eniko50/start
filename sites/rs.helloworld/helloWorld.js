@@ -1,6 +1,6 @@
 const puppeteer = require('puppeteer');
 const saver = require('../../utils/saver');
-const database = require('../../utils/dbConfig');
+const insertIntoDatabase = require('../../utils/dbConfig');
 const jobs = [];
 const fromString = require('uuidv4').fromString;
 
@@ -52,14 +52,16 @@ async function evaluatePage(page, url) {
 
         const details = await page.evaluate(async (currentUrl) => {
             let image = '';
-            const data = {
+            const unstructuredData = {};
+            unstructuredData.HTML = document.querySelector('html').innerHTML;
+            const structuredData = {
                 title: document.querySelector('#fastedit_html_oglas h1') ?
-                    document.querySelector('#fastedit_html_oglas h1').innerText.trim() : 
-                    document.querySelector('head > title') ? document.querySelector('head > title').innerText.split('| ')[0].trim() : ''                    .innerText.split('| ')[0].trim()                    ,
+                    document.querySelector('#fastedit_html_oglas h1').innerText.trim() :
+                    document.querySelector('head > title') ? document.querySelector('head > title').innerText.split('| ')[0].trim() : ''.innerText.split('| ')[0].trim(),
                 position: '',
                 hiringOrganization: {
-                    name: document.querySelector('span:nth-child(6) meta') ? 
-                    document.querySelector('span:nth-child(6) meta').content : '',
+                    name: document.querySelector('span:nth-child(6) meta') ?
+                        document.querySelector('span:nth-child(6) meta').content : '',
                     sameAs: ''
                 },
                 validThrough: document.querySelector('div:nth-child(11) div div:nth-child(8) strong') ?
@@ -73,7 +75,7 @@ async function evaluatePage(page, url) {
                             document.querySelector('div div:nth-child(2) span strong').innerText : '',
                         addressCountry: '',
                         addressRegion: document.querySelector('div div:nth-child(2) span meta:nth-child(4)') ?
-                        document.querySelector('div div:nth-child(2) span meta:nth-child(4)').content : ''
+                            document.querySelector('div div:nth-child(2) span meta:nth-child(4)').content : ''
                     }
                 },
                 responsibilities: '',
@@ -81,11 +83,11 @@ async function evaluatePage(page, url) {
                 baseSalary: '',
                 equityOffered: '',
                 description: document.querySelector('#fastedit_html_oglas') ?
-                document.querySelector('#fastedit_html_oglas')
+                    document.querySelector('#fastedit_html_oglas')
                         .innerText.trim().replace(/Deadline for applications: \d+\.\d+\.\d+\./g, '') ?
-                        document.querySelector('#fastedit_html_oglas').innerText.trim() : 
-                        document.querySelector('#fastedit_html_oglas img') ? 
-                        image = document.querySelector('#fastedit_html_oglas img').src : '' : '',
+                        document.querySelector('#fastedit_html_oglas').innerText.trim() :
+                        document.querySelector('#fastedit_html_oglas img') ?
+                            image = document.querySelector('#fastedit_html_oglas img').src : '' : '',
                 language: '',
                 skillRequirements: '',
                 educationRequirements: '',
@@ -103,18 +105,28 @@ async function evaluatePage(page, url) {
                 relocationOffered: '',
                 jobBenefits: ''
             }
-            return [data, image];
+            return [structuredData, unstructuredData, image];
         }, jobsURL[i]);
 
-        if (details[1]) {
-            let fileName = details[1].split('/');
+        if (details[2]) {
+            let fileName = details[2].split('/');
             fileName = fileName[fileName.length - 1].split('.')[0];
-            await saver.downloadAsBlob(details[1], './sites/rs.helloworld/data/images/', fileName);
+            await saver.downloadAsBlob(details[2], './sites/rs.helloworld/data/images/', fileName);
         } else {
-            details[0].id = fromString(JSON.stringify(details[0]));
-            jobs.push(details[0]);
-            await saver.saveToJSON(jobs, './sites/rs.helloworld/data/helloWorld.json');
-            // await database('helloWorld', details[0]);
+            try {
+                details[0]._id = fromString(JSON.stringify(details[0]));
+                await insertIntoDatabase('helloWorld_structured', details[0]);
+                details[1]._id = fromString(JSON.stringify(details[1]));
+                await insertIntoDatabase('helloWorld_unstructured', details[1]);
+            } catch (e) {
+                if (e.message.includes('E11000 duplicate key error collection:')) {
+                    continue;
+                } else {
+                    throw e;
+                }
+            }
+            // jobs.push(details[0]);
+            // await saver.saveToJSON(jobs, './sites/rs.helloworld/data/helloWorld.json');
         }
     }
     return jobsURL;

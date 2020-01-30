@@ -7,8 +7,10 @@ module.exports = async (collectionName, data) => {
         useUnifiedTopology: true
     });
     await client.connect();
+
     await client.db('jobs')
         .collection(collectionName).insertOne(data);
     console.log('1 document inserted!');
+
     await client.close();
 }

@@ -4,7 +4,7 @@ const fromString = require('uuidv4').fromString;
 
 const jobs = [];
 let date = Date.now();
-const database = require('../../utils/dbConfig');
+const insertIntoDatabase = require('../../utils/dbConfig');
 (async () => {
     try {
         const browser = await puppeteer.launch({ headless: true });
@@ -49,8 +49,10 @@ async function evaluatePage(page, url) {
         await page.goto(jobsURL[i]);
 
         const details = await page.evaluate(async (currentUrl) => {
+            const unstructuredData = {};
+            unstructuredData.HTML = document.querySelector('html').innerHTML;
             let image = '';
-            const data = {
+            const stucturedData = {
                 '@context': 'http://zamphyr.com/',
                 '@type': 'JobPosting',
                 title: document.querySelector('#__fastedit_html_oglas h1') ?
@@ -153,19 +155,33 @@ async function evaluatePage(page, url) {
                 },
                 relocationOffered: '',
                 jobBenefits: ''
-            }            
-            return [data, image];
+            }
+            return [stucturedData, unstructuredData, image];
         }, jobsURL[i]);
 
-        if (details[1]) {
-            let fileName = details[1].split('/');
+        if (details[2]) {
+            let fileName = details[2].split('/');
             fileName = fileName[fileName.length - 1].split('.')[0];
-            await saver.downloadAsBlob(details[1], './sites/com.infostud.poslovi/data/images/', fileName );
+            await saver.downloadAsBlob(details[2], './sites/com.infostud.poslovi/data/images/', fileName);
         } else {
-            // await database('infostud', details[0]);
-            details[0].id = fromString(JSON.stringify(details[0]));
-            jobs.push(details[0]);
-            await saver.saveToJSON(jobs, './sites/com.infostud.poslovi/data/data.json');
+
+            try {
+                
+                details[0]._id = fromString(JSON.stringify(details[0]));
+                await insertIntoDatabase('infostud_structured', details[0]);
+                
+                details[1]._id = fromString(JSON.stringify(details[1]));
+                await insertIntoDatabase('infostud_unstructured', details[1]);
+
+            } catch (e) {
+                if (e.message.includes('E11000 duplicate key error collection:')) {
+                    continue;
+                } else {
+                    throw e;
+                }
+            }
+            // jobs.push(details[0]);
+            // await saver.saveToJSON(jobs, './sites/com.infostud.poslovi/data/data.json');
         }
     }
 

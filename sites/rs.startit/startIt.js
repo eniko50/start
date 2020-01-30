@@ -4,7 +4,7 @@ const saver = require('../../utils/saver');
 const fromString = require('uuidv4').fromString;
 
 const options = require('../../utils/userAgent').options;
-const database = require('../../utils/dbConfig');
+const insertIntoDatabase = require('../../utils/dbConfig');
 let date = Date.now();
 
 let jobs = [];
@@ -57,7 +57,9 @@ async function evaluatePage(page, url) {
 
             const details = await page.evaluate(async (currentUrl) => {
                 // let image = '';
-                const data = {
+                const unstructuredData = {};
+                unstructuredData.HTML = document.querySelector('html').innerHTML;
+                const structuredData = {
                     title: document.querySelector('#so-heading h1') ?
                         document.querySelector('#so-heading h1').innerText : '',
                     position: '',
@@ -102,13 +104,23 @@ async function evaluatePage(page, url) {
                     relocationOffered: '',
                     jobBenefits: ''
                 }
-                return data;
+                return [structuredData, unstructuredData];
             }, jobsURL[i]);
 
-            details.id = fromString(JSON.stringify(details));
-            jobs.push(details);
-            await saver.saveToJSON(jobs, './sites/rs.startit/data/startit.json');
-            // await database('startIt', details[0]);
+            try {
+                details[0]._id = fromString(JSON.stringify(details[0]));
+                await insertIntoDatabase('startit_structured', details[0]);
+                details[1]._id = fromString(JSON.stringify(details[1]));
+                await insertIntoDatabase('startit_unstructured', details[1]);
+            } catch (e) {
+                if (e.message.includes('E11000 duplicate key error collection:')) {
+                    continue;
+                } else {
+                    throw e;
+                }
+            }
+            // jobs.push(details[0]);
+            // await saver.saveToJSON(jobs, './sites/rs.startit/data/startit.json');
 
         } else {
             let fileName = jobsURL[i].split('/');

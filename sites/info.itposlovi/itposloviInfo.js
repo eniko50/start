@@ -1,6 +1,6 @@
 const puppeteer = require('puppeteer');
 const saver = require('../../utils/saver');
-const database = require('../../utils/dbConfig');
+const insertIntoDatabase = require('../../utils/dbConfig');
 
 const jobs = [];
 const fromString = require('uuidv4').fromString;
@@ -31,15 +31,17 @@ const fromString = require('uuidv4').fromString;
             await page.goto(jobsURL[i]);
 
             const details = await page.evaluate(() => {
-                const data = {
-                    title: document.querySelector('#job h4') ? 
-                    document.querySelector('#job h4').innerText : '',
+                const unstructuredData = {};
+                unstructuredData.HTML = document.querySelector('html').innerHTML;
+                const structuredData = {
+                    title: document.querySelector('#job h4') ?
+                        document.querySelector('#job h4').innerText : '',
                     position: '',
                     hiringOrganization: {
                         name: document.querySelector('#job span').children[0] ?
-                        document.querySelector('#job span').children[0].innerText : '',
+                            document.querySelector('#job span').children[0].innerText : '',
                         sameAs: document.querySelector('#job span').children[0] ?
-                        document.querySelector('#job span').children[0].href : '', 
+                            document.querySelector('#job span').children[0].href : '',
                     },
                     validThrough: '',
                     datePosted: '',
@@ -56,7 +58,7 @@ const fromString = require('uuidv4').fromString;
                     baseSalary: '',
                     equityOffered: '',
                     description: document.querySelector('.job-description') ?
-                    document.querySelector('.job-description').innerText : '',
+                        document.querySelector('.job-description').innerText : '',
                     language: '',
                     skillRequirements: '',
                     educationRequirements: '',
@@ -65,8 +67,8 @@ const fromString = require('uuidv4').fromString;
                     jobStartDate: '',
                     jobEndDate: '',
                     jobLocationType: document.querySelector('#job span') ?
-                    document.querySelector('#job span').innerText.match(/\(.+\)/g) ?
-                        document.querySelector('#job span').innerText.match(/\(.+\)/g)[0].replace(/[\(\)]/g, '') : '' : '',
+                        document.querySelector('#job span').innerText.match(/\(.+\)/g) ?
+                            document.querySelector('#job span').innerText.match(/\(.+\)/g)[0].replace(/[\(\)]/g, '') : '' : '',
                     proxyOrganization: '',
                     zamphyrLevel: '',
                     workHours: '',
@@ -75,12 +77,22 @@ const fromString = require('uuidv4').fromString;
                     relocationOffered: '',
                     jobBenefits: ''
                 }
-                return data;
+                return [structuredData, unstructuredData];
             });
-            details.id = fromString(JSON.stringify(details));
-            jobs.push(details);
-            await saver.saveToJSON(details, './sites/info.itposlovi/data/itposloviInfo.json')
-            // await database('itposloviInfo', details);
+            try {
+                details[0]._id = fromString(JSON.stringify(details[0]));
+                await insertIntoDatabase('itposlovi.info_structured', details[0]);
+                details[1]._id = fromString(JSON.stringify(details[1]));
+                await insertIntoDatabase('itposlovi.info_unstructured', details[1]);
+            } catch (e) {
+                if (e.message.includes('E11000 duplicate key error collection:')) {
+                    continue;
+                } else {
+                    throw e;
+                }
+            }
+            // jobs.push(details[0]);
+            // await saver.saveToJSON(jobs, './sites/info.itposlovi/data/itposloviInfo.json')
         }
         await browser.close();
 
